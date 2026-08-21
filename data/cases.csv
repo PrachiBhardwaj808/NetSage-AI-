@@ -1,0 +1,181 @@
+"case_id","category","title","symptom","topology","device_context","show_commands","show_output","expected_fault","osi_layer","concept","severity","expected_next_command","expected_fix","verification_command"
+"CASE-001","VLAN","Wrong VLAN on Access Port","PC1 and PC2 are supposed to be in the same VLAN but cannot ping each other even though they have IPs in the same subnet.","PC1 -> Fa0/1 (SW1) | PC2 -> Fa0/2 (SW1)","Cisco 2960 switch SW1. PC1 is on Fa0/1 and PC2 is on Fa0/2. Both should be in VLAN 10.","show vlan brief","VLAN Name                             Status    Ports
+---- -------------------------------- --------- -------------------------------
+1    default                          active    Fa0/2, Fa0/3
+10   VLAN0010                         active    Fa0/1
+20   VLAN0020                         active    Fa0/4","PC2 on Fa0/2 is assigned to VLAN 1 (default) instead of VLAN 10. That is why PC1 and PC2 cannot communicate.","Layer 2","VLAN access port assignment","high","show interfaces Fa0/2 switchport","SW1(config)# interface Fa0/2
+SW1(config-if)# switchport mode access
+SW1(config-if)# switchport access vlan 10","show vlan brief"
+"CASE-002","VLAN","VLAN Does Not Exist in Database","Ports Fa0/3 and Fa0/4 are configured for VLAN 20 but hosts connected to them cannot send any traffic.","PC3 -> Fa0/3 (SW1) | PC4 -> Fa0/4 (SW1)","Cisco 2960 switch SW1. VLAN 20 is assigned to Fa0/3 and Fa0/4 but VLAN 20 was never created.","show vlan brief","VLAN Name                             Status    Ports
+---- -------------------------------- --------- -------------------------------
+1    default                          active    Fa0/5, Fa0/6
+10   VLAN0010                         active    Fa0/1, Fa0/2","VLAN 20 does not exist in the VLAN database. Ports assigned to a non-existent VLAN become inactive.","Layer 2","VLAN database existence","high","show interfaces Fa0/3 switchport","SW1(config)# vlan 20
+SW1(config-vlan)# name SALES
+SW1(config-vlan)# exit","show vlan brief"
+"CASE-003","VLAN","VLAN Missing from Trunk Allowed List","VLAN 30 users on SW1 can talk to each other but cannot reach VLAN 30 users on SW2. All other VLANs work fine between the two switches.","PC5 -> Fa0/5 (SW1) | PC6 -> Fa0/5 (SW2) | SW1 Gi0/1 -- trunk -- Gi0/1 SW2","Cisco 2960 switches SW1 and SW2 connected via Gi0/1 trunk link. VLAN 30 exists on both switches but is excluded from the trunk.","show interfaces trunk","Port        Mode         Encapsulation  Status        Native vlan
+Gi0/1       on           802.1q         trunking      1
+
+Port        Vlans allowed on trunk
+Gi0/1       1-29,31-4094
+
+Port        Vlans allowed and active in management domain
+Gi0/1       1,10,20","VLAN 30 is not in the allowed VLAN list on the trunk. Frames tagged with VLAN 30 are dropped at the trunk port.","Layer 2","Trunk allowed VLAN list","high","show vlan brief","SW1(config)# interface Gi0/1
+SW1(config-if)# switchport trunk allowed vlan add 30
+
+SW2(config)# interface Gi0/1
+SW2(config-if)# switchport trunk allowed vlan add 30","show interfaces trunk"
+"CASE-004","VLAN","Access Port Set to Trunk Mode","A PC connected to Fa0/10 cannot get a DHCP address and cannot pass traffic. The port shows as trunk instead of access.","PC7 -> Fa0/10 (SW1)","Cisco 2960 switch SW1. Fa0/10 should be an access port in VLAN 10 for a regular PC but was accidentally configured as a trunk.","show interfaces Fa0/10 switchport","Name: Fa0/10
+Switchport: Enabled
+Administrative Mode: trunk
+Operational Mode: trunk
+Administrative Trunking Encapsulation: dot1q
+Access Mode VLAN: 1 (default)
+Trunking Native Mode VLAN: 1 (default)","Fa0/10 is in trunk mode. A regular PC cannot handle 802.1Q tags so it receives no valid frames and cannot get a DHCP address.","Layer 2","Switchport mode access vs trunk","medium","show running-config interface Fa0/10","SW1(config)# interface Fa0/10
+SW1(config-if)# switchport mode access
+SW1(config-if)# switchport access vlan 10","show interfaces Fa0/10 switchport"
+"CASE-005","Routing","Wrong Default Gateway on PC","PC1 (192.168.10.5/24) can ping all PCs in the same subnet but cannot reach any device outside the subnet.","PC1 -> SW1 -> R1 (Fa0/0: 192.168.10.1) -> Internet","PC1 has a static IP with gateway set to 192.168.10.100 which does not exist. The correct gateway is 192.168.10.1.","show ip interface brief (on router R1)","Interface              IP-Address      OK? Method Status                Protocol
+FastEthernet0/0        192.168.10.1    YES manual up                    up
+FastEthernet0/1        192.168.20.1    YES manual up                    up","PC1 has the wrong default gateway configured (192.168.10.100). No router exists at that address so off-subnet traffic cannot be forwarded.","Layer 3","Default gateway configuration","medium","ping 192.168.10.1 (from PC1)","On PC1: Change default gateway from 192.168.10.100 to 192.168.10.1","ping 192.168.20.1 (from PC1)"
+"CASE-006","Routing","Missing Static Route","R1 can reach the 192.168.10.0/24 network but cannot reach 192.168.30.0/24 even though R2 is the next hop and is reachable.","PC1 (192.168.10.0/24) -> R1 -> R2 -> PC2 (192.168.30.0/24)","Cisco routers R1 and R2 connected via 10.0.0.0/30. R1 has no route to 192.168.30.0/24.","show ip route","Codes: C - connected, S - static, R - RIP
+
+Gateway of last resort is not set
+
+C    192.168.10.0/24 is directly connected, Fa0/0
+C    10.0.0.0/30 is directly connected, Se0/0","R1 has no route to the 192.168.30.0/24 network. Packets destined for that subnet are dropped because R1 does not know how to forward them.","Layer 3","Static routing","high","ping 10.0.0.2","R1(config)# ip route 192.168.30.0 255.255.255.0 10.0.0.2","show ip route"
+"CASE-007","Routing","OSPF Neighbor Not Forming","Two routers R1 and R2 are connected but OSPF neighbor relationship is stuck in INIT or DOWN state. No routes are being exchanged.","R1 Gi0/0 -- link -- Gi0/0 R2","Cisco routers R1 and R2. OSPF is configured on both but R1 is in area 0 and R2 is in area 1 on the same link.","show ip ospf neighbor","Neighbor ID     Pri   State           Dead Time   Address         Interface
+(no output - no neighbors listed)","R1 and R2 have mismatched OSPF area numbers on the connected interface. OSPF neighbors must be in the same area to form an adjacency.","Layer 3","OSPF area mismatch","high","show ip ospf interface Gi0/0","R2(config)# router ospf 1
+R2(config-router)# no network 172.16.0.0 0.0.0.255 area 1
+R2(config-router)# network 172.16.0.0 0.0.0.255 area 0","show ip ospf neighbor"
+"CASE-008","Routing","OSPF Hello Timer Mismatch","OSPF neighbor relationship keeps going down and coming back up. The link is stable but the adjacency is flapping.","R1 Gi0/0 -- link -- Gi0/0 R2","Cisco routers R1 and R2. OSPF hello interval on R1 is 10 seconds (default) but on R2 it was manually set to 5 seconds.","show ip ospf interface Gi0/0","GigabitEthernet0/0 is up, line protocol is up
+Internet Address 192.168.1.1/30, Area 0
+Hello interval 10, Dead interval 40
+Neighbor Count is 0, Adjacent neighbor count is 0","OSPF hello timers do not match between R1 and R2. Routers must have the same hello and dead intervals to maintain a stable adjacency.","Layer 3","OSPF hello and dead timers","medium","show ip ospf interface (on R2)","R2(config)# interface Gi0/0
+R2(config-if)# ip ospf hello-interval 10
+R2(config-if)# ip ospf dead-interval 40","show ip ospf neighbor"
+"CASE-009","Routing","RIP Version Mismatch","R1 and R2 are running RIP but are not exchanging routing updates. Both have RIP configured but no routes appear in the routing table.","R1 Se0/0 -- serial link -- Se0/0 R2","Cisco routers R1 using RIP version 1 and R2 using RIP version 2. RIPv1 and RIPv2 are not compatible in this setup.","show ip protocols","Routing Protocol is RIP
+Version 1
+Sending updates every 30 seconds
+Invalid after 180 seconds","R1 is running RIP version 1 and R2 is running RIP version 2. RIPv1 does not understand version 2 updates and vice versa in this case.","Layer 3","RIP version compatibility","medium","show ip route","R1(config)# router rip
+R1(config-router)# version 2","show ip route"
+"CASE-010","Routing","Default Route Not Advertised in OSPF","All routers in the OSPF domain can reach each other but none can reach the Internet. The edge router R1 has a default route but it is not shared with other routers.","PC -> R2 -> R1 -> ISP (Internet)","Cisco routers running OSPF. R1 has a default route via ISP but it is not redistributed into OSPF so other routers have no Internet route.","show ip route (on R2)","Codes: O - OSPF, C - connected
+
+O    192.168.10.0/24 [110/2] via 10.0.0.1
+C    10.0.0.0/30 is directly connected, Gi0/0
+
+(no default route entry)","R1 has a default route but it is not being advertised into OSPF. Other routers do not know how to reach the Internet.","Layer 3","OSPF default route redistribution","high","show ip route (on R1)","R1(config)# router ospf 1
+R1(config-router)# default-information originate","show ip route (on R2)"
+"CASE-011","ACL","ACL Blocking Valid Traffic","PC1 in 192.168.10.0/24 cannot reach the web server at 192.168.20.10 on port 80. All other traffic is working fine.","PC1 (192.168.10.5) -> R1 -> Web Server (192.168.20.10)","Cisco router R1 with an inbound ACL on Fa0/0. The ACL is too restrictive and blocks HTTP traffic from PC1.","show access-lists","Extended IP access list 101
+10 deny tcp 192.168.10.0 0.0.0.255 host 192.168.20.10 eq 80 (25 matches)
+20 permit ip any any","ACL 101 explicitly denies TCP port 80 from the 192.168.10.0/24 network to the web server before the permit statement applies.","Layer 3","Extended ACL - port filtering","high","show ip interface Fa0/0","R1(config)# ip access-list extended 101
+R1(config-ext-nacl)# no 10
+R1(config-ext-nacl)# 10 permit tcp 192.168.10.0 0.0.0.255 host 192.168.20.10 eq 80","show access-lists"
+"CASE-012","ACL","ACL Applied in Wrong Direction","An ACL was created to block traffic from outside coming into the network but it is accidentally blocking internal users from going out.","PC1 (internal) -> R1 (Fa0/0 = inside, Fa0/1 = outside) -> Internet","Cisco router R1. The ACL meant to filter inbound Internet traffic was applied outbound on the wrong interface.","show ip interface Fa0/0","FastEthernet0/0 is up, line protocol is up
+Outbound  access list is 110
+Inbound   access list is not set","ACL 110 is applied outbound on the inside interface (Fa0/0) instead of inbound on the outside interface (Fa0/1). It is filtering traffic leaving the internal network.","Layer 3","ACL direction in vs out","high","show ip interface Fa0/1","R1(config)# interface Fa0/0
+R1(config-if)# no ip access-group 110 out
+R1(config)# interface Fa0/1
+R1(config-if)# ip access-group 110 in","show ip interface Fa0/1"
+"CASE-013","ACL","Implicit Deny Blocking All Traffic","After applying an ACL to allow only SSH access, all other traffic including ICMP and HTTP stopped working for all users.","Admin PC -> R1 -> Network","Cisco router R1. An ACL was added to allow only SSH (port 22) traffic. The implicit deny any any at the end blocks everything else.","show access-lists","Standard IP access list 10
+10 permit tcp any any eq 22 (5 matches)","The ACL only permits SSH. Due to the implicit deny at the end of every ACL, all other traffic (ICMP, HTTP, etc.) is blocked.","Layer 3","ACL implicit deny","high","show running-config | include access-list","R1(config)# ip access-list extended 10
+R1(config-ext-nacl)# 20 permit icmp any any
+R1(config-ext-nacl)# 30 permit tcp any any eq 80
+R1(config-ext-nacl)# 40 permit tcp any any eq 443","show access-lists"
+"CASE-014","NAT","NAT Pool Exhausted","Internal users were able to reach the Internet earlier in the day but now many users are getting connection timeouts. Some users still work fine.","Multiple PCs -> R1 (NAT) -> ISP -> Internet","Cisco router R1 doing NAT with a small pool of 5 public IPs. More than 5 users are trying to access the Internet simultaneously.","show ip nat translations","Pro Inside global      Inside local       Outside local      Outside global
+tcp 203.0.113.1:1234  192.168.10.1:5000  8.8.8.8:80        8.8.8.8:80
+tcp 203.0.113.2:1235  192.168.10.2:5001  8.8.8.8:80        8.8.8.8:80
+tcp 203.0.113.3:1236  192.168.10.3:5002  8.8.8.8:80        8.8.8.8:80
+tcp 203.0.113.4:1237  192.168.10.4:5003  8.8.8.8:80        8.8.8.8:80
+tcp 203.0.113.5:1238  192.168.10.5:5004  8.8.8.8:80        8.8.8.8:80","The NAT pool only has 5 IP addresses and all are in use. New connection requests from other internal hosts cannot be translated.","Layer 3","NAT address pool size","medium","show ip nat statistics","R1(config)# ip nat pool PUBLIC_POOL 203.0.113.1 203.0.113.20 netmask 255.255.255.0
+(or switch to PAT / overload to share one IP across many users)
+R1(config)# ip nat inside source list 1 interface Fa0/1 overload","show ip nat translations"
+"CASE-015","NAT","PAT Not Configured on Correct Interface","Internal users cannot reach the Internet. The NAT translation command references an interface but it is the inside interface not the outside one.","PCs -> R1 (Fa0/0 inside, Fa0/1 outside) -> ISP","Cisco router R1. PAT is configured but the overload is pointed at Fa0/0 (inside) instead of Fa0/1 (outside public IP).","show running-config | include nat","ip nat inside source list 1 interface FastEthernet0/0 overload
+interface FastEthernet0/0
+ ip address 192.168.10.1 255.255.255.0
+ ip nat inside
+interface FastEthernet0/1
+ ip address 203.0.113.1 255.255.255.252
+ ip nat outside","PAT is using the inside interface (Fa0/0) for translation instead of the outside interface (Fa0/1). Translated packets carry a private IP as source which is invalid on the Internet.","Layer 3","PAT interface selection","high","show ip nat statistics","R1(config)# no ip nat inside source list 1 interface FastEthernet0/0 overload
+R1(config)# ip nat inside source list 1 interface FastEthernet0/1 overload","show ip nat translations"
+"CASE-016","STP","Unintended Root Bridge Elected","Traffic between two switches is taking a long slow path. An old cheap switch in the network has become the root bridge for Spanning Tree.","SW1 -- SW2 -- SW3 (old switch, low bridge priority)","Three Cisco switches connected in a triangle. SW3 is an old 2950 with default priority 32768 but it has the lowest MAC address so it won the root election.","show spanning-tree","VLAN0001
+  Root ID    Priority    32769
+             Address     0000.0000.0001 (SW3)
+  This bridge is the root
+
+  Bridge ID  Priority    32769
+             Address     0000.aaaa.0001 (SW1)","SW3 became the root bridge because it had the lowest MAC address with the same default priority. This results in suboptimal traffic paths.","Layer 2","STP root bridge election","medium","show spanning-tree detail","SW1(config)# spanning-tree vlan 1 priority 4096","show spanning-tree"
+"CASE-017","STP","Port Stuck in Blocking State","A host connected to Fa0/5 on SW2 cannot reach the network. The port is connected and the link light is on but no traffic passes.","PC -> Fa0/5 (SW2) | SW2 is connected to SW1 which is root","Cisco 2960 switch SW2. Fa0/5 is a non-root port blocked by Spanning Tree because STP thinks there is a loop.","show spanning-tree","VLAN0001
+  Role Sts Cost      Prio.Nbr Type
+  ---- --- --------- -------- ----------------
+  Desg FWD 19        128.1    P2p    (Fa0/1)
+  Root FWD 19        128.2    P2p    (Fa0/2)
+  Desg BLK 19        128.5    P2p    (Fa0/5)","Fa0/5 is in blocking state because STP detected a loop or the port lost a root port election. The host cannot send traffic on a blocked port.","Layer 2","STP port states","medium","show spanning-tree detail","SW2(config)# interface Fa0/5
+SW2(config-if)# spanning-tree portfast
+(Use PortFast only on ports connected to end devices, not switches)","show spanning-tree"
+"CASE-018","STP","PortFast Enabled on Trunk Port","After enabling PortFast on all ports for faster convergence, a loop formed in the network causing a broadcast storm.","SW1 -- Gi0/1 (trunk) -- SW2 -- more switches","Cisco switches. A network admin enabled PortFast on all interfaces including Gi0/1 which is a trunk link to another switch.","show spanning-tree interface Gi0/1","VLAN0001
+  Port info      port id         128.1
+  Role           Desg Sts        FWD
+  Link-type      P2p  Peer (STP) has port in PortFast mode
+
+(broadcast storm occurring)","PortFast was enabled on a trunk port connecting to another switch. PortFast skips STP listening and learning states so a loop formed immediately.","Layer 2","STP PortFast misuse","critical","show interfaces trunk","SW1(config)# interface Gi0/1
+SW1(config-if)# no spanning-tree portfast
+(PortFast should only be on ports connected to end hosts)","show spanning-tree"
+"CASE-019","Security","Telnet Enabled Instead of SSH","The network admin needs to connect to the router remotely but the connection is unencrypted. Password is visible in packet capture.","Admin PC -> R1 (VTY lines)","Cisco router R1 with VTY lines configured for Telnet only. SSH is not enabled so all management traffic goes over the network in plaintext.","show line vty 0 4","Line       Mtty Uses Noise  Overruns  Int
+ 0 vty 0     0    1    0       0/0       -
+ 1 vty 1     0    0    0       0/0       -
+ 2 vty 2     0    0    0       0/0       -
+
+Transport Input: telnet","VTY lines are configured to accept Telnet only. Telnet sends all data including usernames and passwords in plaintext.","Layer 7","Telnet vs SSH security","high","show running-config | section vty","R1(config)# ip domain-name company.local
+R1(config)# crypto key generate rsa modulus 2048
+R1(config)# line vty 0 4
+R1(config-line)# transport input ssh
+R1(config-line)# login local","ssh -l admin 192.168.10.1"
+"CASE-020","Security","Console Port Has No Password","Anyone with physical access to the router console port can log in without a password. This is a basic security misconfiguration.","Local access via console cable to R1","Cisco router R1. The console line has no password configured. The login command was also not set so the device accepts blank password.","show line console 0","Line       Mtty Uses Noise  Overruns  Int
+ 0 con 0    -    1    0       0/0       -
+
+Password: (not set)
+Login: (not set)","No password is set on the console line. An attacker or unauthorized person with physical access can directly enter privileged mode.","Layer 7","Console port security","high","show running-config | section con","R1(config)# line console 0
+R1(config-line)# password cisco123
+R1(config-line)# login","(physically test that password is prompted)"
+"CASE-021","DHCP","DHCP Pool Configured on Wrong Subnet","Hosts on the 192.168.20.0/24 network are not getting IP addresses. The DHCP server on R1 has a pool but it is configured for the wrong subnet.","PCs (expect 192.168.20.x) -> SW1 -> R1 (DHCP server)","Cisco router R1 acting as DHCP server. The DHCP pool is configured for 192.168.10.0/24 but the client segment is 192.168.20.0/24.","show ip dhcp pool","Pool LAN_POOL :
+ Network         : 192.168.10.0 255.255.255.0
+ Default router  : 192.168.10.1
+ Lease           : 1 days 0 hours 0 minutes","The DHCP pool is for the 192.168.10.0/24 network but clients are on 192.168.20.0/24. Offers do not match the client subnet so clients get no IP.","Layer 3","DHCP pool subnet","medium","show ip dhcp binding","R1(config)# no ip dhcp pool LAN_POOL
+R1(config)# ip dhcp pool LAN_POOL
+R1(config-dhcp)# network 192.168.20.0 255.255.255.0
+R1(config-dhcp)# default-router 192.168.20.1
+R1(config-dhcp)# dns-server 8.8.8.8","show ip dhcp binding"
+"CASE-022","DHCP","DHCP Excluded Range Not Set","The router itself (192.168.10.1) and a static server (192.168.10.2) are getting IP conflicts because DHCP is handing out those addresses to clients.","PCs -> SW1 -> R1 (DHCP server) | Server at 192.168.10.2","Cisco router R1 acting as DHCP server for 192.168.10.0/24. The first few addresses are used by network devices but not excluded from the pool.","show ip dhcp conflict","IP address        Detection method   Detection time
+192.168.10.1      Gratuitous ARP     Aug 20 10:15:32
+192.168.10.2      Gratuitous ARP     Aug 20 10:16:04","DHCP is assigning 192.168.10.1 and 192.168.10.2 to clients. These addresses are already used by the router and a static server causing IP conflicts.","Layer 3","DHCP excluded addresses","medium","show ip dhcp pool","R1(config)# ip dhcp excluded-address 192.168.10.1 192.168.10.10","show ip dhcp pool"
+"CASE-023","DHCP","DHCP Helper Address Not Configured","PCs on the remote 192.168.30.0/24 subnet cannot get an IP address. The DHCP server is on a different subnet at 192.168.10.2.","PCs (192.168.30.x) -> R2 -> R1 -> DHCP Server (192.168.10.2)","Cisco router R2 is the gateway for the 192.168.30.0/24 subnet. DHCP requests are broadcast and do not cross router boundaries by default.","show ip interface Fa0/0","FastEthernet0/0 is up, line protocol is up
+  Internet address is 192.168.30.1/24
+  Broadcast address is 255.255.255.255
+  Helper address is not set","DHCP broadcasts from clients cannot cross R2 to reach the DHCP server. The ip helper-address command is needed to forward DHCP requests as unicast.","Layer 3","DHCP relay / helper address","medium","show running-config interface Fa0/0","R2(config)# interface Fa0/0
+R2(config-if)# ip helper-address 192.168.10.2","show ip interface Fa0/0"
+"CASE-024","Interface","Interface Shutdown","A router interface shows as administratively down. The connected segment has no network access.","PC segment -> R1 Gi0/1 (down) -> Core network","Cisco router R1. Interface Gi0/1 was shut down either intentionally or by accident. Hosts on that segment lose connectivity.","show ip interface brief","Interface              IP-Address      OK? Method Status                Protocol
+GigabitEthernet0/0    192.168.10.1    YES manual up                    up
+GigabitEthernet0/1    192.168.20.1    YES manual administratively down down","Gi0/1 is in administratively down state which means someone ran the shutdown command. It needs a no shutdown command to bring it back up.","Layer 1","Interface shutdown and no shutdown","low","show interfaces Gi0/1","R1(config)# interface Gi0/1
+R1(config-if)# no shutdown","show ip interface brief"
+"CASE-025","Interface","Duplex Mismatch Causing Slow Performance","A server connected to SW1 can communicate but the connection is very slow and shows many errors. The link negotiated at half duplex on one side.","Server -> Fa0/24 (SW1) -> Core","Cisco 2960 switch SW1. The server NIC is hardcoded to full duplex but the switch port was set to half duplex causing a mismatch.","show interfaces Fa0/24","FastEthernet0/24 is up, line protocol is up
+  Half-duplex, 100Mb/s
+  Input errors: 345, CRC: 120, Frame: 0, Runts: 15
+  Output errors: 0, Collisions: 280","Fa0/24 is operating at half duplex while the server expects full duplex. This causes late collisions and CRC errors leading to poor performance.","Layer 1","Duplex mismatch","medium","show interfaces Fa0/24 counters errors","SW1(config)# interface Fa0/24
+SW1(config-if)# duplex full
+SW1(config-if)# speed 100","show interfaces Fa0/24"
+"CASE-026","Interface","Wrong Subnet Mask on Router Interface","R1 and R2 are directly connected but cannot ping each other. The link addresses are in different subnets due to a subnet mask typo.","R1 Gi0/0 (10.0.0.1/30) -- link -- Gi0/0 R2 (10.0.0.2/29)","Cisco routers R1 and R2 connected back to back. R1 uses /30 mask and R2 uses /29 mask on the same link.","show ip interface brief","Interface              IP-Address      OK? Method Status     Protocol
+GigabitEthernet0/0    10.0.0.2        YES manual up          up
+
+show run int Gi0/0:
+ ip address 10.0.0.2 255.255.255.248  (/29)","R2 has a /29 mask (255.255.255.248) while R1 has a /30 mask (255.255.255.252). They are in different network ranges so they cannot communicate directly.","Layer 3","Subnet mask configuration","medium","show interfaces Gi0/0","R2(config)# interface Gi0/0
+R2(config-if)# ip address 10.0.0.2 255.255.255.252","ping 10.0.0.1"
+"CASE-027","Wireless","Wrong SSID or Password on Client","A laptop cannot connect to the company Wi-Fi network. Other devices on the same network work fine. The laptop shows authentication failure.","Laptop -> AP (access point) -> SW1 -> Network","Cisco wireless access point configured with SSID CompanyNet and WPA2 password. The laptop has a saved profile with an old incorrect password.","show dot11 associations","(no output - no client associations listed for the laptop MAC address)","The laptop is failing WPA2 authentication because it has an incorrect password saved. The AP rejects the association request.","Layer 2","Wireless authentication","low","show logging (check for auth failures)","On the laptop: Forget the saved Wi-Fi network and reconnect using the correct SSID (CompanyNet) and current WPA2 password.","show dot11 associations"
+"CASE-028","DNS","DNS Server Unreachable","Users can ping IP addresses (e.g. 8.8.8.8) successfully but cannot browse websites by name. Browser shows DNS resolution failure.","PC -> R1 -> ISP","PC configured with DNS server 192.168.10.53. That DNS server is down or unreachable. DNS queries time out.","ping 8.8.8.8 (from PC)","Reply from 8.8.8.8: bytes=32 time=20ms TTL=55
+Reply from 8.8.8.8: bytes=32 time=18ms TTL=55
+
+ping companydns.local (from PC):
+Request timed out.","The DNS server at 192.168.10.53 is unreachable. IP connectivity works but name resolution fails because DNS queries cannot reach the server.","Layer 7","DNS name resolution","medium","nslookup 8.8.8.8 (check if public DNS works)","On PC: Change DNS server to 8.8.8.8 (Google DNS) or 1.1.1.1 (Cloudflare DNS) as a temporary fix. Investigate why 192.168.10.53 is down.","nslookup google.com"
+"CASE-029","Routing","Inter-VLAN Routing Not Working","PCs in VLAN 10 and VLAN 20 cannot communicate with each other even though they are on the same switch. Both VLANs exist and ports are correctly assigned.","PC1 (VLAN 10) -> SW1 -> Router-on-a-stick (R1)","Cisco 2960 switch SW1 connected to router R1 via Gi0/1 trunk. R1 has subinterfaces for VLAN 10 and VLAN 20 but the trunk is not configured on SW1.","show interfaces trunk","(no output - no trunk ports listed on SW1 Gi0/1)","The link between SW1 and R1 is not configured as a trunk on the switch side. VLAN-tagged frames from R1 are not accepted so inter-VLAN routing fails.","Layer 2","Router-on-a-stick inter-VLAN routing","high","show vlan brief","SW1(config)# interface Gi0/1
+SW1(config-if)# switchport mode trunk
+SW1(config-if)# switchport trunk encapsulation dot1q","show interfaces trunk"
+"CASE-030","Security","Enable Password Not Set","When a user connects via Telnet and enters the enable command to access privileged mode, the router prompts for a password but there is none configured. The router then refuses entry.","Admin PC -> Telnet -> R1 VTY -> R1 enable mode","Cisco router R1. VTY lines have a password for basic login but no enable password or enable secret was configured. Users cannot reach privileged exec mode.","show running-config | include enable","(no enable password or enable secret line found in config)","No enable password or enable secret is configured. The router cannot verify the user for privileged mode access and blocks the enable command.","Layer 7","Enable password vs enable secret","medium","show privilege","R1(config)# enable secret strongpassword123
+(Use enable secret instead of enable password because secret uses MD5 hashing)","show running-config | include enable"

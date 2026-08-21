@@ -1,0 +1,25 @@
+Case ID: DEMO-001
+Category: Connectivity
+Severity: High
+Reported By: Network Operations Team
+Date: 2024-01-15
+
+--- ISSUE DESCRIPTION ---
+
+Users in the Chicago branch office are experiencing complete loss of connectivity
+to the corporate data center in New York. The outage started at approximately
+09:15 AM local time and is affecting all 120 users in the branch.
+
+Symptoms:
+- Ping to 10.10.0.1 (default gateway) succeeds
+- Ping to 192.168.1.1 (DC core router) fails
+- Traceroute times out after the third hop
+- No BGP route updates received in the last 2 hours
+- Branch router logs show: "BGP neighbor 203.0.113.1 went down - Hold timer expired"
+
+Environment:
+- Branch Router: Cisco ISR 4431 (IOS XE 17.6)
+- WAN: MPLS circuit via Provider X (Circuit ID: AX-2024-CH-001)
+- Redundant link: None (single MPLS link)
+
+--- END OF CASE ---
